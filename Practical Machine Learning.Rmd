@@ -4,33 +4,56 @@ author: "Jian"
 date: "December 27, 2015"
 output: html_document
 ---
-# Background
-Using devices such as Jawbone Up, Nike Fuelband, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement- a group of enthusiasts who take measurements about themseleves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, my goal is to use data from accelerometers on the belt, forearm, arm and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. 
+## Background
+Using devices such as Jawbone Up, Nike Fuelband, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement- a group of enthusiasts who take measurements about themseleves regularly to improve their health, to find patterns in their behavior. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, my goal is to use data from accelerometers on the belt, forearm, arm and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. 
+## Getting and Cleaning Data
 ```{r}
-library(caret)
-set.seed(12345)
-
 trainUrl <- "http://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
 testUrl <- "http://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
 training <- read.csv(url(trainUrl))
+testing<-read.csv(url(testUrl))
 head(training)
 summary(training)
 str(training)
-training <- read.csv(url(trainUrl), na.strings=c("NA","#DIV/0!",""))
-testing <- read.csv(url(testUrl), na.strings=c("NA","#DIV/0!",""))
+
 ```
-This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
-
-When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
-
+####Zero- and Near Zero-Variance Predictors
+In some situations, the data generating mechanism can create predictors that only have a single unique vale(i.e. a "zero-variance predictor"). For many models, this may cause the model to crash or the fit to be unstable. 
+Similarly, predictors might have only a handful of unique values that occur with very low frequencies. 
+The concern here that these predictors may become zero-variance predictors when the data are split into cross-validation/bootstrap sub-samples or that a few samples may have an undue influence on the model. These "near-zero-variance"predictors may need to be identified and eliminated prior to modeling. 
+I will use the nearZeroVar function in the Caret package to elimintate the near-zero-variance. 
 ```{r}
-summary(cars)
+library(caret)
+nzv <- nearZeroVar(training)
+training <- training[, -nzv]
+#training <- read.csv(url(trainUrl), #na.strings=c("NA","#DIV/0!",""))
+#testing <- read.csv(url(testUrl), #na.strings=c("NA","#DIV/0!",""))
+#Remove the NA variables as well
+NAs<-apply (training, 2, function(x){sum(is.na(x))})
+training<-training[,which(NAs == 0)]
+str(training)
 ```
-
-You can also embed plots, for example:
-
-```{r, echo=FALSE}
-plot(cars)
+Cleaning the testing data sets as well: 
+```{r}
+nzv <- nearZeroVar(testing)
+testing <- testing[, -nzv]
+#Remove the NA variables as well
+NAs<-apply (testing, 2, function(x){sum(is.na(x))})
+testing<-testing[,which(NAs == 0)]
+str(testing)
 ```
-
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+Remove varibles that don't make intuitive sense for prediction e.g. ( X, user_name,  raw_timestamp_part_1, raw_timestamp_part_2 and cvtd_timestamp.) It is also noticible that  the last variable for training data sets is"classe" and for testing data set is "problem_id" 
+```{r}
+training <- training[, -(1:5)]
+str(training)
+testing <- testing[, -(1:5)]
+str(testing)
+```
+I would like to be able to estimate the out-of-sample error, which requires me to split the full training data in two parts: a smaller training set(training1) and a validation set(training2).
+```{r}
+set.seed(12345)
+inTrain<-createDataPartition(y=training$classe,p=0.6,list=F)
+training1<-training[inTrain,]
+training2<-training[-inTrain,]
+```
+## Modeling Fitting
